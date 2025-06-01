@@ -169,19 +169,12 @@ func (cm *ConnectionManger) handleConnectionRead(conn *Connection) {
 				}
 				// validation
 				switch cmd {
-				case UPLOAD_CMD:
-				case DELETE_CMD:
-				case READ_CMD:
-				case ARCHIVE_CMD:
-				case COMPRESS_CMD:
-					{
-						log.Printf("received %d command from client %s", cmd, conn.conn.RemoteAddr().String())
-					}
+				case UPLOAD_CMD, DELETE_CMD, READ_CMD, ARCHIVE_CMD, COMPRESS_CMD:
+					log.Printf("received %d command from client %s", cmd, conn.conn.RemoteAddr().String())
+					// valid command, continue processing
 				default:
-					{
-						log.Printf("unkown command received %d", cmd)
-						return
-					}
+					log.Printf("unknown command received %d", cmd)
+					return
 				}
 
 				fileNameLgth, err := handleLengthParsing(conn.conn, 4)
@@ -209,7 +202,7 @@ func (cm *ConnectionManger) handleConnectionRead(conn *Connection) {
 					{
 						opError = uploadFile(fileName, &conn.conn)
 						if opError == nil {
-							conn.conn.Write(fmt.Appendf(nil, "Received filed %s successfully\r\n", fileName))
+							conn.conn.Write(fmt.Appendf(nil, "Received file %s successfully from client %s\r\n", fileName, conn.conn.RemoteAddr()))
 							cm.closeConnection(conn)
 						}
 					}

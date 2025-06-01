@@ -37,7 +37,7 @@ func uploadFile(fileName string, r *net.Conn) error {
 		return err
 	}
 	fileLength := binary.BigEndian.Uint64(lengthBytes)
-	// TODO: think of a better folder structure
+	// TODO: think of a better folder structure, CAS ??
 	f, err := os.Create(fmt.Sprintf("testdata/%s", filepath.Base(fileName)))
 	if err != nil {
 		return err
