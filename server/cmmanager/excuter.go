@@ -23,6 +23,27 @@ func compressFile(fileName string) error {
 }
 
 func readFile(fileName string, w io.Writer) error {
+	f, err := os.Open(fileName)
+	if err != nil {
+		return err
+	}
+	buff := make([]byte, 4*1024)
+
+	for {
+		n, err := f.Read(buff)
+		if err != nil {
+			if err == io.EOF || err == io.ErrUnexpectedEOF {
+				return nil
+			}
+			return err
+		}
+		if n > 0 {
+			_, err := w.Write(buff[:n])
+			if err != nil {
+				break
+			}
+		}
+	}
 	return nil
 }
 

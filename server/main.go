@@ -16,7 +16,6 @@ func main() {
 		OnConnect: func(conn *net.Conn) {
 		},
 		OnMessage: func(conn *net.Conn, data []byte) {
-
 		},
 	}
 	cm := cmManager.NewConnectionManager(&cmConfig)

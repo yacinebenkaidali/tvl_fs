@@ -3,20 +3,51 @@ package cmmanager
 import (
 	"context"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"log"
 	"net"
 	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
 
+type Command uint16
+
+var commandNames = map[string]Command{
+	"upload":   UPLOAD_CMD,
+	"delete":   DELETE_CMD,
+	"archive":  ARCHIVE_CMD,
+	"compress": COMPRESS_CMD,
+	"read":     READ_CMD,
+}
+
+func (c *Command) String() string {
+	for name, val := range commandNames {
+		if val == *c {
+			return name
+		}
+	}
+	return "unknown"
+}
+
+func (c *Command) Set(s string) error {
+	s = strings.ToLower(s)
+	if val, ok := commandNames[s]; ok {
+		*c = val
+		return nil
+	}
+	return fmt.Errorf("invalid command: %q", s)
+}
+
 const (
-	UPLOAD_CMD   uint16 = 0x0001
-	DELETE_CMD   uint16 = 0x0002
-	ARCHIVE_CMD  uint16 = 0x0003
-	COMPRESS_CMD uint16 = 0x0004
-	READ_CMD     uint16 = 0x0005
+	UPLOAD_CMD   Command = 0x0001
+	DELETE_CMD   Command = 0x0002
+	ARCHIVE_CMD  Command = 0x0003
+	COMPRESS_CMD Command = 0x0004
+	READ_CMD     Command = 0x0005
 )
 
 type ConnectionClient struct {
@@ -29,14 +60,14 @@ type ConnectionClient struct {
 	readTimeout  time.Duration
 	writeTimeout time.Duration
 
-	onMessage func(data []byte)
+	onMessage func(cmd Command, data []byte)
 }
 
 type ClientConfig struct {
 	ReadTimeout  time.Duration
 	WriteTimeout time.Duration
 
-	OnMessage func(data []byte)
+	OnMessage func(cmd Command, data []byte)
 }
 
 func NewConnectionClient(config *ClientConfig) *ConnectionClient {
@@ -72,8 +103,22 @@ func (c *ConnectionClient) Connect(address string) error {
 	return nil
 }
 
-func (c *ConnectionClient) Listen() {
+func (c *ConnectionClient) Listen(cmd Command, filename string) {
 	defer c.Wg.Done()
+
+	deadline := time.Now().Add(c.readTimeout)
+	err := (*c.conn).SetReadDeadline(deadline)
+	if err != nil {
+		log.Printf("error set from connection %v\r\n", err)
+		return
+	}
+
+	f, err := os.Create(fmt.Sprintf("./received/%s", filepath.Base(filename)))
+	if err != nil {
+		log.Printf("there was a problem opening a file %+v\r\n", err)
+	}
+	defer f.Close()
+
 	buff := make([]byte, 4*1024)
 	for {
 		select {
@@ -81,12 +126,6 @@ func (c *ConnectionClient) Listen() {
 			return
 		default:
 			{
-				deadline := time.Now().Add(c.readTimeout)
-				err := (*c.conn).SetReadDeadline(deadline)
-				if err != nil {
-					log.Printf("error set from connection %v\r\n", err)
-					return
-				}
 				n, err := (*c.conn).Read(buff)
 				if err != nil {
 					if io.EOF == err {
@@ -96,8 +135,15 @@ func (c *ConnectionClient) Listen() {
 					log.Printf("error reading from connection %v\r\n", err)
 				}
 				if n > 0 {
-					if c.onMessage != nil {
-						c.onMessage(buff[:n])
+					if cmd == READ_CMD {
+						_, err = f.Write(buff[:n])
+						if err != nil {
+							log.Printf("there was a problme writing to file %+v\r\n", err)
+						}
+					} else {
+						if c.onMessage != nil {
+							c.onMessage(cmd, buff[:n])
+						}
 					}
 				}
 			}
@@ -118,12 +164,13 @@ func (c *ConnectionClient) Upload(filename string) error {
 	}
 	// Write command
 	buffInfo := make([]byte, 8)
-	binary.BigEndian.PutUint16(buffInfo[:2], UPLOAD_CMD)
+	binary.BigEndian.PutUint16(buffInfo[:2], uint16(UPLOAD_CMD))
 	(*c.conn).Write(buffInfo[:2])
 
 	// Write filename length
 	binary.BigEndian.PutUint32(buffInfo[:4], uint32(len(filename)))
 	(*c.conn).Write(buffInfo[:4])
+
 	// Write filename
 	(*c.conn).Write([]byte(filename))
 
@@ -153,6 +200,27 @@ func (c *ConnectionClient) Upload(filename string) error {
 			}
 		}
 	}
+}
+
+func (c *ConnectionClient) Read(filename string) error {
+	defer c.Wg.Done()
+	// Write command
+	buffInfo := make([]byte, 8)
+	binary.BigEndian.PutUint16(buffInfo[:2], uint16(READ_CMD))
+	_, err := (*c.conn).Write(buffInfo[:2])
+	if err != nil {
+		return err
+	}
+	// Write filename length
+	binary.BigEndian.PutUint32(buffInfo[:4], uint32(len(filename)))
+	_, err = (*c.conn).Write(buffInfo[:4])
+	if err != nil {
+		return err
+	}
+
+	// Write filename
+	_, err = (*c.conn).Write([]byte(filename))
+	return err
 }
 
 func (c *ConnectionClient) Shutdown() {
