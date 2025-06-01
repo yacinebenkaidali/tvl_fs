@@ -195,8 +195,6 @@ func (cm *ConnectionManger) handleConnectionRead(conn *Connection) {
 					log.Printf("Error reading length prefix from %s: %v", (conn.conn).RemoteAddr(), err)
 					return
 				}
-				// log.Println("========>", cmd, fileName, fileNameLgth)
-				// return
 				var opError error
 				switch cmd {
 				case UPLOAD_CMD:
@@ -213,6 +211,7 @@ func (cm *ConnectionManger) handleConnectionRead(conn *Connection) {
 					{
 						opError = readFile(fileName, conn.conn)
 						if opError == nil {
+							conn.conn.Write(fmt.Appendf(nil, "Done streaming file %s to client %s\r\n", fileName, conn.conn.RemoteAddr()))
 							cm.closeConnection(conn)
 						}
 					}
