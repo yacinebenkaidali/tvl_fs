@@ -8,11 +8,8 @@ import (
 	cmManager "github.com/yacinebenkaidali/tlv_tcp_client/cmmanager"
 )
 
-const (
-	fileName = "./testdata/bigfile.dat"
-)
-
 func main() {
+	filename := flag.String("f", "./testdata/bigfile.dat", "the name of the file to send")
 	flag.Parse()
 
 	config := cmManager.ClientConfig{
@@ -29,7 +26,7 @@ func main() {
 	go client.Listen()
 
 	client.Wg.Add(1)
-	go client.Upload(fileName)
+	go client.Upload(*filename)
 
 	client.Wg.Wait()
 }
