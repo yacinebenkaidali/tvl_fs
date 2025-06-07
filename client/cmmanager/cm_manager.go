@@ -123,10 +123,7 @@ func (c *ConnectionClient) Listen(cmd Command, filename string) {
 }
 
 func (c *ConnectionClient) Upload(filename string) error {
-	defer func() {
-		c.Wg.Done()
-		log.Println("returning ....")
-	}()
+	defer c.Wg.Done()
 	f, err := os.Open(filename)
 	if err != nil {
 		return err

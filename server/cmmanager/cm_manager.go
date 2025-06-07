@@ -225,10 +225,6 @@ func (cm *ConnectionManger) handleConnectionRead(conn *Connection) {
 				case UPLOAD_CMD:
 					{
 						opError = uploadFile(fileName, conn)
-						// if opError == nil {
-						// conn.conn.Write(fmt.Appendf(nil, "Received file %s successfully from client %s\r\n", fileName, conn.conn.RemoteAddr()))
-						// 	cm.closeConnection(conn)
-						// }
 					}
 				case DELETE_CMD:
 					opError = deleteFile(fileName)
