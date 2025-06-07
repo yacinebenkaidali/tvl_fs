@@ -2,12 +2,14 @@ package cmmanager
 
 import (
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -23,6 +25,7 @@ type Connection struct {
 	ID         string
 	conn       net.Conn
 	Address    string
+	progressCh chan float32
 	ctx        context.Context
 	cancelFunc context.CancelFunc
 }
@@ -135,14 +138,36 @@ func (cm *ConnectionManger) handleConnection(conn net.Conn, id string) {
 		Address:    conn.RemoteAddr().String(),
 		ctx:        ctx,
 		cancelFunc: cancel,
+		progressCh: make(chan float32, 10),
 	}
 	cm.connections.Store(id, connection)
 
 	if cm.onConnect != nil {
 		cm.onConnect(&conn)
 	}
-	cm.wg.Add(1)
+
+	cm.wg.Add(2)
+	go cm.handleConnectionWrite(&connection)
 	go cm.handleConnectionRead(&connection)
+}
+
+func (cm *ConnectionManger) handleConnectionWrite(connection *Connection) {
+	defer cm.wg.Done()
+
+	for percentage := range connection.progressCh {
+		buff := make([]byte, 8)
+		binary.BigEndian.PutUint64(buff, uint64(percentage))
+
+		_, err := connection.conn.Write(buff)
+		if err != nil {
+			if errors.Is(err, syscall.EPIPE) {
+				return
+			}
+			log.Printf("there was a problem writing to the connection, %q\n", err)
+		}
+		time.Sleep(time.Microsecond * 100)
+	}
+
 }
 
 func (cm *ConnectionManger) handleConnectionRead(conn *Connection) {
@@ -199,11 +224,11 @@ func (cm *ConnectionManger) handleConnectionRead(conn *Connection) {
 				switch cmd {
 				case UPLOAD_CMD:
 					{
-						opError = uploadFile(fileName, &conn.conn)
-						if opError == nil {
-							conn.conn.Write(fmt.Appendf(nil, "Received file %s successfully from client %s\r\n", fileName, conn.conn.RemoteAddr()))
-							cm.closeConnection(conn)
-						}
+						opError = uploadFile(fileName, conn)
+						// if opError == nil {
+						// conn.conn.Write(fmt.Appendf(nil, "Received file %s successfully from client %s\r\n", fileName, conn.conn.RemoteAddr()))
+						// 	cm.closeConnection(conn)
+						// }
 					}
 				case DELETE_CMD:
 					opError = deleteFile(fileName)
@@ -247,5 +272,6 @@ func (cm *ConnectionManger) closeConnection(conn *Connection) {
 	if cm.onDisconnect != nil {
 		cm.onDisconnect(&conn.conn)
 	}
+	close(conn.progressCh)
 	log.Printf("connection with id %s was closed\n", conn.ID)
 }

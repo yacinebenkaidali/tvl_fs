@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net"
 	"os"
 	"path/filepath"
 )
@@ -47,13 +46,13 @@ func readFile(fileName string, w io.Writer) error {
 	return nil
 }
 
-func uploadFile(fileName string, r *net.Conn) error {
+func uploadFile(fileName string, r *Connection) error {
 	const (
 		defaultBufferSize = 4 * 1024
 		maxFileSize       = 1 * 1024 * 1024 * 1024 // 1GB max file size
 	)
 	lengthBytes := make([]byte, 8)
-	_, err := io.ReadFull(*r, lengthBytes)
+	_, err := io.ReadFull(r.conn, lengthBytes)
 	if err != nil {
 		return err
 	}
@@ -66,11 +65,12 @@ func uploadFile(fileName string, r *net.Conn) error {
 
 	defer f.Close()
 	var currentReadSize uint64 = 0
+	var iterations int8 = 0
 
 	buff := make([]byte, defaultBufferSize)
 	for {
 		var readSize = min(fileLength-currentReadSize, defaultBufferSize)
-		n, err := io.ReadFull(*r, buff[:readSize])
+		n, err := io.ReadFull(r.conn, buff[:readSize])
 		if err != nil {
 			return err
 		}
@@ -80,6 +80,12 @@ func uploadFile(fileName string, r *net.Conn) error {
 				return err
 			}
 			currentReadSize += uint64(nn)
+			// Send progress update at each 10% increment
+			progress := float32((float64(currentReadSize) / float64(fileLength)) * 100)
+			if progress >= float32(iterations)*5 {
+				r.progressCh <- progress
+				iterations++
+			}
 			if currentReadSize == fileLength {
 				// end of the current file, the content should have been written to local file
 				break

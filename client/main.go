@@ -1,10 +1,11 @@
 package main
 
 import (
+	"encoding/binary"
 	"flag"
-	"log"
 	"time"
 
+	"github.com/schollz/progressbar/v3"
 	cmManager "github.com/yacinebenkaidali/tlv_tcp_client/cmmanager"
 )
 
@@ -15,7 +16,10 @@ func main() {
 	flag.Var(&cmd, "cmd", "Command to execute (upload, delete, archive, compress, read)")
 
 	flag.Parse()
+	bar := progressbar.Default(100)
+	_ = bar
 
+	var client *cmManager.ConnectionClient
 	config := cmManager.ClientConfig{
 		ReadTimeout:  25 * time.Second,
 		WriteTimeout: 10 * time.Second,
@@ -28,12 +32,16 @@ func main() {
 				}
 			default:
 				{
-					log.Printf("received %s\r\n", string(data))
+					percentage := binary.BigEndian.Uint64(data)
+					bar.Set(int(percentage))
+					if percentage == 100 {
+						client.Cancel()
+					}
 				}
 			}
 		},
 	}
-	client := cmManager.NewConnectionClient(&config)
+	client = cmManager.NewConnectionClient(&config)
 	client.Connect("localhost:8000")
 
 	client.Wg.Add(1)

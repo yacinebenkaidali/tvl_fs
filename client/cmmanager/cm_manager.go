@@ -26,7 +26,7 @@ type ConnectionClient struct {
 	conn    *net.Conn
 	Wg      sync.WaitGroup
 	ctx     context.Context
-	cancel  context.CancelFunc
+	Cancel  context.CancelFunc
 
 	readTimeout  time.Duration
 	writeTimeout time.Duration
@@ -45,7 +45,7 @@ func NewConnectionClient(config *ClientConfig) *ConnectionClient {
 	ctx, cancel := context.WithCancel(context.Background())
 	cm := ConnectionClient{
 		ctx:          ctx,
-		cancel:       cancel,
+		Cancel:       cancel,
 		Wg:           sync.WaitGroup{},
 		readTimeout:  config.ReadTimeout,
 		writeTimeout: config.WriteTimeout,
@@ -123,7 +123,10 @@ func (c *ConnectionClient) Listen(cmd Command, filename string) {
 }
 
 func (c *ConnectionClient) Upload(filename string) error {
-	defer c.Wg.Done()
+	defer func() {
+		c.Wg.Done()
+		log.Println("returning ....")
+	}()
 	f, err := os.Open(filename)
 	if err != nil {
 		return err
@@ -198,5 +201,5 @@ func (c *ConnectionClient) Shutdown() {
 	if err := (*c.conn).Close(); err != nil {
 		log.Printf("there was a problem closing this connection\r\n")
 	}
-	c.cancel()
+	c.Cancel()
 }
