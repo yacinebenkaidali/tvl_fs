@@ -153,21 +153,30 @@ func (cm *ConnectionManger) handleConnection(conn net.Conn, id string) {
 
 func (cm *ConnectionManger) handleConnectionWrite(connection *Connection) {
 	defer cm.wg.Done()
+	for {
+		select {
+		case <-connection.ctx.Done():
+			return
+		case percentage, ok := <-connection.progressCh:
+			{
+				if !ok {
+					return
+				}
+				buff := make([]byte, 8)
+				binary.BigEndian.PutUint64(buff, uint64(percentage))
 
-	for percentage := range connection.progressCh {
-		buff := make([]byte, 8)
-		binary.BigEndian.PutUint64(buff, uint64(percentage))
-
-		_, err := connection.conn.Write(buff)
-		if err != nil {
-			if errors.Is(err, syscall.EPIPE) {
-				return
+				_, err := connection.conn.Write(buff)
+				if err != nil {
+					if errors.Is(err, syscall.EPIPE) || errors.Is(err, io.EOF) {
+						return
+					}
+					// network error
+					log.Printf("there was a problem writing to the connection, %q\n", err)
+				}
+				time.Sleep(time.Microsecond * 100)
 			}
-			log.Printf("there was a problem writing to the connection, %q\n", err)
 		}
-		time.Sleep(time.Microsecond * 100)
 	}
-
 }
 
 func (cm *ConnectionManger) handleConnectionRead(conn *Connection) {

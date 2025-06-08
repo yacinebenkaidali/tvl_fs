@@ -17,7 +17,6 @@ func main() {
 
 	flag.Parse()
 	bar := progressbar.Default(100)
-	_ = bar
 
 	var client *cmManager.ConnectionClient
 	config := cmManager.ClientConfig{
@@ -27,8 +26,7 @@ func main() {
 			switch cmd {
 			case cmManager.READ_CMD:
 				{
-					// f, err := os.Create(fmt.Sprintf("./received/%s", *filename))
-					// // rebuild file
+
 				}
 			default:
 				{
